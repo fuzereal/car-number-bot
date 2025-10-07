@@ -17,12 +17,11 @@ var botClient = new TelegramBotClient(BOT_TOKEN);
 try
 {
     var me = await botClient.GetMeAsync();
-    Console.WriteLine($" Бот @{me.Username} успешно запущен!");
-    Console.WriteLine("  Для остановки нажмите Ctrl+C\n");
+    Console.WriteLine($" Бот @{me.Username}");
+
 }
 catch (Exception ex)
 {
-    Console.WriteLine($" Ошибка подключения: {ex.Message}");
     return;
 }
 
@@ -37,7 +36,7 @@ botClient.StartReceiving(
     receiverOptions: receiverOptions
 );
 
-Console.WriteLine(" Бот готов к работе! Ожидаем сообщения...");
+
 await Task.Delay(-1);
 
 async Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken ct)
@@ -72,7 +71,7 @@ async Task HandleUpdateAsync(ITelegramBotClient client, Update update, Cancellat
 
 Task HandlePollingErrorAsync(ITelegramBotClient client, Exception exception, CancellationToken ct)
 {
-    Console.WriteLine($" Ошибка: {exception.Message}");
+    Console.WriteLine($"{exception.Message}");
     return Task.CompletedTask;
 }
 
@@ -134,11 +133,11 @@ async Task ProcessCarNumber(long chatId, string number, CancellationToken ct)
                     caption: " Фото автомобиля",
                     cancellationToken: ct);
 
-                Console.WriteLine($" Фото отправлено: {carInfo.PhotoUrl}");
+                
             }
             catch (Exception ex)
             {
-                Console.WriteLine($" Не удалось отправить фото: {ex.Message}");
+                
                 await botClient.SendTextMessageAsync(
                     chatId: chatId,
                     text: $" Фото доступно по ссылке: {carInfo.PhotoUrl}",
@@ -156,7 +155,7 @@ async Task ProcessCarNumber(long chatId, string number, CancellationToken ct)
     }
 }
 
-// Отправка справки
+
 async Task SendHelpMessage(long chatId, CancellationToken ct)
 {
     await botClient.SendTextMessageAsync(
@@ -173,7 +172,7 @@ async Task SendUnknownCommand(long chatId, CancellationToken ct)
         cancellationToken: ct);
 }
 
-// Проверка формата номера
+
 bool IsValidCarNumber(string text)
 {
     if (string.IsNullOrWhiteSpace(text)) return false;
@@ -248,16 +247,16 @@ async Task<CarInfo> GetCarInfoWithSeleniumAsync(string number)
 
         if (submitButton == null)
         {
-            Console.WriteLine(" Отправляем через Enter...");
+            
             inputField.SendKeys(Keys.Enter);
         }
         else
         {
-            Console.WriteLine(" Нажимаем кнопку отправки...");
+            
             submitButton.Click();
         }
 
-        Console.WriteLine(" Ждем загрузки результатов...");
+        
         await Task.Delay(500);
 
         try
@@ -265,7 +264,7 @@ async Task<CarInfo> GetCarInfoWithSeleniumAsync(string number)
             var closeButtons = driver.FindElements(By.CssSelector(".close_modal_window, .modal-close, .close"));
             if (closeButtons.Count > 0)
             {
-                Console.WriteLine(" Закрываем рекламу...");
+                
                 closeButtons[0].Click();
                 await Task.Delay(200);
             }
@@ -274,14 +273,14 @@ async Task<CarInfo> GetCarInfoWithSeleniumAsync(string number)
         {
         }
 
-        Console.WriteLine("Парсим результаты...");
+        
         return ParseSeleniumResults(driver, number);
     }
     finally
     {
         driver?.Quit();
         driver?.Dispose();
-        Console.WriteLine("Браузер закрыт");
+        
     }
 }
 
@@ -308,13 +307,7 @@ CarInfo ParseSeleniumResults(IWebDriver driver, string number)
             carInfo.VIN = FindByClass(driver, "resultAutoCardDataItemAnswer", "VIN");
         }
 
-        Console.WriteLine($"Найдены данные:");
-        Console.WriteLine($"   Регион: {carInfo.Region}");
-        Console.WriteLine($"   VIN: {carInfo.VIN}");
-        Console.WriteLine($"   Мощность: {carInfo.Power}");
-        Console.WriteLine($"   Цвет: {carInfo.Color}");
-        Console.WriteLine($"   Страна: {carInfo.Country}");
-        Console.WriteLine($"   Фото: {carInfo.PhotoUrl}");
+
 
         return carInfo;
     }
@@ -460,4 +453,5 @@ public class CarInfo
     public string Color { get; set; } = string.Empty;
     public string Country { get; set; } = string.Empty;
     public string PhotoUrl { get; set; } = string.Empty;
+
 }
