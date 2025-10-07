@@ -8,7 +8,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 
-string BOT_TOKEN = "8127847071:AAHb1kuAa0BPsDbXPp1BjBnPi2Lzu-guP2E";
+string BOT_TOKEN = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") 
+                   ?? throw new Exception("");
 
 
 
@@ -455,3 +456,4 @@ public class CarInfo
     public string PhotoUrl { get; set; } = string.Empty;
 
 }
+
