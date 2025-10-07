@@ -1,35 +1,71 @@
-name: Run Telegram Bot
+name:  Telegram Car Number Bot
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ main, master ]
+  schedule:
+    
+    - cron: '0 */4 * * *'
+  workflow_dispatch: 
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  MAX_RUNTIME: 14000 
 
 jobs:
-  run-bot:
+  deploy-and-run:
     runs-on: ubuntu-latest
+    timeout-minutes: 250 
     
     steps:
-    - name: Checkout code
+    - name:  Checkout repository
       uses: actions/checkout@v4
       
-    - name: Setup .NET
+    - name:  Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
         
-    - name: Install dependencies
+    - name:  Restore dependencies
       run: dotnet restore
       
-    - name: Install Chrome for Selenium
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y chromium-browser chromium-chromedriver
-        
-    - name: Build bot
-      run: dotnet build --configuration Release --no-restore
+    - name:  Build application
+      run: dotnet build --configuration Release --no-restore --verbosity minimal
       
-    - name: Run Telegram Bot
+    - name:  Install Google Chrome
+      uses: browser-actions/setup-chrome@v1
+      with:
+        chrome-version: stable
+      
+    - name: 🔧 Verify Chrome installation
+      run: |
+        echo "Chrome path:"
+        which google-chrome
+        echo "Chrome version:"
+        google-chrome --version
+        echo "ChromeDriver version:"
+        chromedriver --version
+        
+    - name:  Run Telegram Bot
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      run: dotnet run --configuration Release
+        GITHUB_ACTIONS: true
+      run: |
+        echo " Starting Telegram Bot..."
+        echo "Start time: $(date)"
+        echo "Bot will run for approximately 4 hours"
+        
+        # Запускаем бота с таймаутом
+        timeout ${{ env.MAX_RUNTIME }} dotnet run --configuration Release --no-build || EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo " Bot finished successfully"
+        elif [ $EXIT_CODE -eq 124 ]; then
+          echo " Bot stopped by timeout (4 hours), will be restarted by schedule"
+        else
+          echo " Bot crashed with exit code: $EXIT_CODE"
+          echo " Bot will be restarted in 4 hours by schedule"
+          exit 1
+        fi
+        
+        echo "🛑 Bot execution finished at: $(date)"
