@@ -1,71 +1,256 @@
-name:  Telegram Car Number Bot
+name: 🤖 Telegram Car Number Bot
 
 on:
   push:
     branches: [ main, master ]
   schedule:
-    
-    - cron: '0 */4 * * *'
-  workflow_dispatch: 
+    # Перезапуск каждые 5 часов 50 минут (в пределах 6-часового лимита)
+    - cron: '50 */5 * * *'
+    # Дополнительный перезапуск утром
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable debug mode'  
+        required: false
+        default: false
+        type: boolean
 
 env:
   DOTNET_VERSION: '8.0.x'
-  MAX_RUNTIME: 14000 
+  NODE_VERSION: '18.x'
 
 jobs:
-  deploy-and-run:
+  run-bot:
+    name: 🚀 Run Telegram Bot
     runs-on: ubuntu-latest
-    timeout-minutes: 250 
+    timeout-minutes: 350 # 5 часов 50 минут
     
     steps:
-    - name:  Checkout repository
+    - name: 📋 Check Repository Status
+      run: |
+        echo "=== 🤖 Bot Startup Information ==="
+        echo "Repository: ${{ github.repository }}"
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Run ID: ${{ github.run_id }}"
+        echo "Triggered by: ${{ github.event_name }}"
+        echo "Start time: $(date)"
+        echo "Expected runtime: 5 hours 50 minutes"
+        echo "Next scheduled run: in 5 hours"
+        echo "=================================="
+        
+    - name: 🗂️ Checkout code
       uses: actions/checkout@v4
-      
-    - name:  Setup .NET
+      with:
+        fetch-depth: 1
+        
+    - name: 🛠️ Setup .NET Environment
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
-    - name:  Restore dependencies
-      run: dotnet restore
-      
-    - name:  Build application
-      run: dotnet build --configuration Release --no-restore --verbosity minimal
-      
-    - name:  Install Google Chrome
+    - name: 📦 Restore Dependencies
+      run: |
+        echo "Restoring NuGet packages..."
+        dotnet restore
+        echo "✅ Dependencies restored"
+        
+    - name: 🔨 Build Application
+      run: |
+        echo "Building application..."
+        dotnet build --configuration Release --no-restore --verbosity minimal
+        echo "✅ Application built successfully"
+        
+    - name: 🖥️ Setup Chrome Browser
       uses: browser-actions/setup-chrome@v1
       with:
-        chrome-version: stable
-      
-    - name: 🔧 Verify Chrome installation
+        chrome-version: 'stable'
+        
+    - name: 🔧 Configure Chrome Environment
       run: |
-        echo "Chrome path:"
-        which google-chrome
-        echo "Chrome version:"
-        google-chrome --version
-        echo "ChromeDriver version:"
-        chromedriver --version
+        echo "=== Chrome Configuration ==="
+        echo "Chrome path: $(which google-chrome)"
+        echo "Chrome version: $(google-chrome --version)"
+        echo "ChromeDriver version: $(chromedriver --version)"
+        echo "============================"
         
-    - name:  Run Telegram Bot
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        GITHUB_ACTIONS: true
+        # Создаем необходимые директории
+        mkdir -p /tmp/chrome-profiles
+        echo "✅ Chrome environment configured"
+        
+    - name: 🧪 Test Chrome Installation
       run: |
-        echo " Starting Telegram Bot..."
-        echo "Start time: $(date)"
-        echo "Bot will run for approximately 4 hours"
-        
-        # Запускаем бота с таймаутом
-        timeout ${{ env.MAX_RUNTIME }} dotnet run --configuration Release --no-build || EXIT_CODE=$?
-        
-        if [ $EXIT_CODE -eq 0 ]; then
-          echo " Bot finished successfully"
-        elif [ $EXIT_CODE -eq 124 ]; then
-          echo " Bot stopped by timeout (4 hours), will be restarted by schedule"
+        echo "Testing Chrome installation..."
+        timeout 30s google-chrome --headless --disable-gpu --no-sandbox --disable-dev-shm-usage --remote-debugging-port=9222 about:blank &
+        CHROME_PID=$!
+        sleep 5
+        if ps -p $CHROME_PID > /dev/null; then
+          echo "✅ Chrome is working correctly"
+          kill $CHROME_PID 2>/dev/null || true
         else
-          echo " Bot crashed with exit code: $EXIT_CODE"
-          echo " Bot will be restarted in 4 hours by schedule"
+          echo "❌ Chrome test failed"
           exit 1
         fi
         
-        echo "🛑 Bot execution finished at: $(date)"
+    - name: 🚀 Launch Telegram Bot
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        GITHUB_ACTIONS: 'true'
+        CHROME_BIN: '/usr/bin/google-chrome'
+        CHROME_PATH: '/usr/bin/google-chrome'
+        # Отладочные переменные если нужно
+        DEBUG_MODE: ${{ inputs.debug }}
+      run: |
+        echo "=== 🤖 Bot Launch Sequence ==="
+        echo "Start time: $(date)"
+        echo "Environment: GitHub Actions"
+        echo "Chrome: $(google-chrome --version)"
+        echo "Runtime: 5 hours 50 minutes"
+        echo "=============================="
+        
+        # Функция для логирования
+        log() {
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+        }
+        
+        # Счетчик перезапусков
+        RESTART_COUNT=0
+        MAX_RESTARTS=2
+        
+        while [ $RESTART_COUNT -le $MAX_RESTARTS ]; do
+          log "Launch attempt $((RESTART_COUNT + 1))"
+          
+          # Запускаем бота с мониторингом
+          START_TIME=$(date +%s)
+          dotnet run --configuration Release --no-build &
+          BOT_PID=$!
+          
+          # Мониторим процесс
+          while kill -0 $BOT_PID 2>/dev/null; do
+            CURRENT_TIME=$(date +%s)
+            RUNTIME=$((CURRENT_TIME - START_TIME))
+            
+            # Автоматическое завершение через 5 часов 50 минут
+            if [ $RUNTIME -gt 21000 ]; then
+              log "🕒 Maximum runtime reached (5h 50m), stopping bot..."
+              kill $BOT_PID 2>/dev/null || true
+              wait $BOT_PID 2>/dev/null || true
+              log "✅ Bot stopped gracefully"
+              exit 0
+            fi
+            
+            # Проверяем каждые 30 секунд
+            sleep 30
+          done
+          
+          # Проверяем код выхода
+          wait $BOT_PID
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            log "✅ Bot finished successfully"
+            break
+          else
+            log "⚠️ Bot crashed with exit code: $EXIT_CODE"
+            RESTART_COUNT=$((RESTART_COUNT + 1))
+            
+            if [ $RESTART_COUNT -le $MAX_RESTARTS ]; then
+              log "🔄 Restarting in 15 seconds... (attempt $RESTART_COUNT/$MAX_RESTARTS)"
+              sleep 15
+            else
+              log "❌ Maximum restart attempts reached"
+              exit 1
+            fi
+          fi
+        done
+        
+        log "🛑 Bot execution completed at: $(date)"
+        
+    - name: 📊 Generate Runtime Report
+      if: always()
+      run: |
+        echo "=== 📈 Bot Runtime Report ==="
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Run ID: ${{ github.run_id }}"
+        echo "Start: ${{ fromJSON(steps.run-bot.outputs.start_time) }}"
+        echo "End: $(date)"
+        echo "Status: ${{ job.status }}"
+        echo "Trigger: ${{ github.event_name }}"
+        echo "Next run: in 5 hours"
+        echo "============================="
+        
+    - name: 💾 Upload Logs Artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bot-logs-${{ github.run_id }}
+        path: |
+          *.log
+          **/*.log
+        retention-days: 7
+        
+    - name: 📢 Success Notification
+      if: success()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          github.rest.issues.create({
+            owner,
+            repo,
+            title: '✅ Bot Running Successfully',
+            body: `🤖 Telegram bot is operating normally\n\n**Details:**\n- Workflow: ${{ github.workflow }}\n- Run ID: ${{ github.run_id }}\n- Start: ${new Date().toISOString()}\n- Runtime: 5 hours 50 minutes\n- Next restart: ${new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString()}\n\n[View Workflow Run](https://github.com/${owner}/${repo}/actions/runs/${{ github.run_id }})`,
+            labels: ['bot', 'success', 'auto-restart']
+          });
+          
+    - name: 🚨 Failure Notification
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          github.rest.issues.create({
+            owner,
+            repo,
+            title: '⚠️ Bot Restart Required',
+            body: `🤖 Telegram bot encountered an issue and will restart automatically\n\n**Details:**\n- Workflow: ${{ github.workflow }}\n- Run ID: ${{ github.run_id }}\n- Failure time: ${new Date().toISOString()}\n- Next restart: ${new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString()}\n\n[View Workflow Run](https://github.com/${owner}/${repo}/actions/runs/${{ github.run_id }})`,
+            labels: ['bot', 'failure', 'auto-restart']
+          });
+
+  monitor:
+    name: 📊 Health Monitor
+    runs-on: ubuntu-latest
+    needs: run-bot
+    if: always()
+    
+    steps:
+    - name: 📈 Generate Health Report
+      run: |
+        echo "=== 🤖 Bot Health Report ==="
+        echo "Generated: $(date)"
+        echo "Main Job Status: ${{ needs.run-bot.result }}"
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Run ID: ${{ github.run_id }}"
+        echo "Duration: ${{ needs.run-bot.outputs.duration }}"
+        
+        if [ "${{ needs.run-bot.result }}" = "success" ]; then
+          echo "Status: ✅ HEALTHY"
+          echo "Uptime: 5+ hours"
+          echo "Next check: in 5 hours"
+        elif [ "${{ needs.run-bot.result }}" = "failure" ]; then
+          echo "Status: ⚠️ NEEDS ATTENTION"
+          echo "Issue: Bot crashed"
+          echo "Action: Auto-restart in 5 hours"
+        else
+          echo "Status: 🔄 UNKNOWN"
+          echo "Action: Monitoring"
+        fi
+        
+        echo "============================"
+        
+    - name: 🔄 Restart Status
+      run: |
+        NEXT_RUN=$(date -d "+5 hours" '+%Y-%m-%d %H:%M:%S')
+        echo "Next scheduled run: $NEXT_RUN"
+        echo "Restart mechanism: GitHub Actions Schedule"
+        echo "Cycle: Every 5 hours"
