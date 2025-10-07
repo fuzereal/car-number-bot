@@ -10,7 +10,72 @@ using System.Text.RegularExpressions;
 
 string BOT_TOKEN = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") ?? throw new Exception("");
 
+// Настройка для GitHub Actions
+bool IS_GITHUB_ACTIONS = Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+string BOT_TOKEN = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") 
+                   ?? throw new Exception("❌ TELEGRAM_BOT_TOKEN not found! Add it to GitHub Secrets");
 
+if (IS_GITHUB_ACTIONS)
+{
+    Console.WriteLine("🎯 GITHUB ACTIONS MODE ACTIVATED");
+    Console.WriteLine("=================================");
+    Console.WriteLine($"🏷️  Repository: {Environment.GetEnvironmentVariable("GITHUB_REPOSITORY")}");
+    Console.WriteLine($"🆔 Run ID: {Environment.GetEnvironmentVariable("GITHUB_RUN_ID")}");
+    Console.WriteLine("⏰ Runtime: 5 hours 50 minutes");
+    Console.WriteLine("🔄 Restart: Auto (every 5 hours)");
+    Console.WriteLine("=================================");
+}
+
+// Глобальный обработчик исключений
+AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+{
+    Console.WriteLine($"💥 GLOBAL UNHANDLED EXCEPTION: {e.ExceptionObject}");
+    if (IS_GITHUB_ACTIONS)
+    {
+        Console.WriteLine("🔄 Bot will restart automatically in 5 hours");
+    }
+    Environment.Exit(1);
+};
+
+TaskScheduler.UnobservedTaskException += (sender, e) =>
+{
+    Console.WriteLine($"💥 UNOBSERVED TASK EXCEPTION: {e.Exception}");
+    e.SetObserved();
+};
+
+try
+{
+    Console.WriteLine($"🚀 Starting Telegram Bot at {DateTime.Now}");
+    
+    // Остальной ваш код запуска бота...
+    var botClient = new TelegramBotClient(BOT_TOKEN);
+    var me = await botClient.GetMeAsync();
+    
+    Console.WriteLine($"✅ Bot @{me.Username} started successfully");
+    
+    if (IS_GITHUB_ACTIONS)
+    {
+        Console.WriteLine("⏳ Running for 5 hours 50 minutes...");
+        // Ждем 5 часов 50 минут перед graceful shutdown
+        await Task.Delay(TimeSpan.FromHours(5).Add(TimeSpan.FromMinutes(50)));
+        Console.WriteLine("🕒 Time limit reached, graceful shutdown");
+        Environment.Exit(0);
+    }
+    else
+    {
+        // Локальный режим - бесконечный запуск
+        await Task.Delay(-1);
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"💥 FATAL ERROR: {ex}");
+    if (IS_GITHUB_ACTIONS)
+    {
+        Console.WriteLine("🔜 Auto-restart in 5 hours via GitHub Actions");
+    }
+    Environment.Exit(1);
+}
 
 var botClient = new TelegramBotClient(BOT_TOKEN);
 
@@ -667,3 +732,4 @@ public class CarInfo
     public string PhotoUrl { get; set; } = string.Empty;
     public bool IsValid { get; set; } = true;
 }
+
